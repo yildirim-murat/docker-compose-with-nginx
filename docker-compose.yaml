@@ -1,13 +1,44 @@
+name: infra
+
 services:
+  reverse-proxy:
+    image: nginx:1.27-alpine
+    container_name: nginx
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Istanbul
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      # TLS sertifikaları
+      # - ./nginx/certs:/etc/nginx/certs:ro
+    networks:
+      - nginx-net
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+
+
   portainer:
     image: portainer/portainer-ce:latest
     container_name: c_portainer
     restart: always
-    ports:
-      - "50002:9000"
+    # ports:
+    #   - "50002:9000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - portainer_data:/data
+    networks:
+      - nginx-net
+    expose:
+      - "9000"
+    command: ["--base-url=/portainer"]
+
 
   jenkins:
     build: .
@@ -20,12 +51,21 @@ services:
     #  DOCKER_CERT_PATH: /certs/client
     #  DOCKER_TLS_VERIFY: '1'
     ports:
-      - "50001:8080"
+      # - "50001:8080"
       - "50000:50000"
+    expose:
+      - "8080"
     volumes:
       - jenkins_home:/var/jenkins_home
       - /var/run/docker.sock:/var/run/docker.sock
       - jenkins-docker-certs:/certs/client
+    networks:
+      - nginx-net
+    environment:
+      - JENKINS_OPTS=--prefix=/jenkins
+    security_opt:
+      - no-new-privileges:true
+
 
 volumes:
   jenkins_home:
@@ -34,3 +74,7 @@ volumes:
 #NOT: Eğer şu hatayı alırsak : 
 # ERROR: permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get "http://%2Fvar%2Frun%2Fdocker.sock/v1.45/info": dial unix /var/run/docker.sock: connect: permission denied
 # Docker ait /var/run/docker.sock yetkilerini Jenkins tarafından yazılabilir yetkisi vermelisin.
+networks:
+  nginx-net:
+    name: nginx-net
+    driver: bridge
